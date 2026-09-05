@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">教师工作台</string>
+    <string name="nav_today">今日任务</string>
+    <string name="nav_teaching">教学</string>
+    <string name="nav_research">科研待办</string>
+    <string name="nav_schedule">日程课表</string>
+    <string name="nav_profile">我的</string>
+</resources>
