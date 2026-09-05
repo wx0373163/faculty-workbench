@@ -3,6 +3,7 @@
 > 一款面向大学教师的 Android 工作台应用，集今日任务、教学课表、科研待办、日程管理与个人中心于一体。
 
 [![Release](https://img.shields.io/github/v/release/wx0373163/faculty-workbench)](https://github.com/wx0373163/faculty-workbench/releases)
+[![Maven Package](https://img.shields.io/badge/Maven-GitHub%20Packages-success.svg)](https://github.com/wx0373163/faculty-workbench/packages)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-1.9.0-purple.svg)](https://kotlinlang.org/)
 [![Min SDK](https://img.shields.io/badge/min%20SDK-24-orange.svg)](https://developer.android.com/studio/releases/platforms)
@@ -139,7 +140,71 @@ app/build/outputs/apk/release/app-release.apk
 
 ## 📦 下载安装
 
+### 方式一：GitHub Releases（APK 直装）
+
 从 [Releases](https://github.com/wx0373163/faculty-workbench/releases) 页面下载最新的 `app-release.apk`，安装到 Android 设备（需开启"未知来源"安装权限）。
+
+### 方式二：GitHub Packages（Maven 依赖）
+
+应用同时发布到 GitHub Packages 的 Maven 仓库，可作为依赖引入：
+
+| 属性 | 值 |
+|------|-----|
+| groupId | `com.example.facultyworkbench` |
+| artifactId | `faculty-workbench` |
+| version | `1.0.0` |
+| packaging | `apk` |
+| 仓库地址 | `https://maven.pkg.github.com/wx0373163/faculty-workbench` |
+
+**引入依赖示例（`build.gradle.kts`）：**
+
+```kotlin
+repositories {
+    maven {
+        url = uri("https://maven.pkg.github.com/wx0373163/faculty-workbench")
+        credentials {
+            username = "YOUR_GITHUB_USERNAME"
+            password = "YOUR_GITHUB_TOKEN"   // 需 read:packages 权限
+        }
+    }
+}
+
+dependencies {
+    implementation("com.example.facultyworkbench:faculty-workbench:1.0.0@apk")
+}
+```
+
+> 如需下载 APK 文件，可通过 Maven 仓库地址直接获取：
+> `https://maven.pkg.github.com/wx0373163/faculty-workbench/com/example/facultyworkbench/faculty-workbench/1.0.0/faculty-workbench-1.0.0.apk`
+
+---
+
+## 🚢 发布到 GitHub Packages
+
+项目已配置 `maven-publish` 插件，可将 Release APK 发布到 GitHub Packages。
+
+### 前置条件
+
+- GitHub Personal Access Token，需包含 `write:packages` 和 `read:packages` 权限
+- 已构建 Release APK（`./gradlew assembleRelease`）
+
+### 发布步骤
+
+设置环境变量后执行发布任务：
+
+```bash
+# Linux / macOS
+export GITHUB_ACTOR=your-github-username
+export GITHUB_TOKEN=your-token-with-write-packages-scope
+./gradlew publishReleasePublicationToGitHubPackagesRepository
+
+# Windows (PowerShell)
+$env:GITHUB_ACTOR = "your-github-username"
+$env:GITHUB_TOKEN = "your-token-with-write-packages-scope"
+.\gradlew publishReleasePublicationToGitHubPackagesRepository
+```
+
+发布配置位于 `app/build.gradle.kts` 的 `afterEvaluate { publishing { ... } }` 块中，包含 groupId、artifactId、version 及 POM 元数据。
 
 ---
 
