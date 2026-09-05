@@ -1,0 +1,28 @@
+# 签名密钥（切勿提交到版本库）
+keystore.properties
+app/keystore/
+*.jks
+*.keystore
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+.trae/
+
+# Kotlin
+.kotlin/
