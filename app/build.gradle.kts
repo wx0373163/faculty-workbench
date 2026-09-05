@@ -6,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("maven-publish")
 }
 
 android {
@@ -106,4 +107,43 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// 发布到 GitHub Packages (Maven)
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                groupId = "com.example.facultyworkbench"
+                artifactId = "faculty-workbench"
+                version = "1.0.0"
+
+                artifact("$buildDir/outputs/apk/release/app-release.apk") {
+                    extension = "apk"
+                }
+
+                pom {
+                    name.set("Faculty Workbench")
+                    description.set("A faculty workbench Android app")
+                    url.set("https://github.com/wx0373163/faculty-workbench")
+                    licenses {
+                        license {
+                            name.set("MIT License")
+                            url.set("https://opensource.org/licenses/MIT")
+                        }
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/wx0373163/faculty-workbench")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR") ?: "wx0373163"
+                    password = System.getenv("GITHUB_TOKEN") ?: ""
+                }
+            }
+        }
+    }
 }
