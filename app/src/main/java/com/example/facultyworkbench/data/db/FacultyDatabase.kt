@@ -8,14 +8,16 @@ import com.example.facultyworkbench.data.dao.CourseDao
 import com.example.facultyworkbench.data.dao.ProfileDao
 import com.example.facultyworkbench.data.dao.ResearchTaskDao
 import com.example.facultyworkbench.data.dao.TaskDao
+import com.example.facultyworkbench.data.dao.TodoDao
 import com.example.facultyworkbench.data.entity.CourseEntity
 import com.example.facultyworkbench.data.entity.ProfileEntity
 import com.example.facultyworkbench.data.entity.ResearchTaskEntity
 import com.example.facultyworkbench.data.entity.TaskEntity
+import com.example.facultyworkbench.data.entity.TodoEntity
 
 @Database(
-    entities = [TaskEntity::class, CourseEntity::class, ResearchTaskEntity::class, ProfileEntity::class],
-    version = 3,
+    entities = [TaskEntity::class, CourseEntity::class, ResearchTaskEntity::class, ProfileEntity::class, TodoEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class FacultyDatabase : RoomDatabase() {
@@ -23,6 +25,7 @@ abstract class FacultyDatabase : RoomDatabase() {
     abstract fun courseDao(): CourseDao
     abstract fun researchTaskDao(): ResearchTaskDao
     abstract fun profileDao(): ProfileDao
+    abstract fun todoDao(): TodoDao
 
     companion object {
         @Volatile

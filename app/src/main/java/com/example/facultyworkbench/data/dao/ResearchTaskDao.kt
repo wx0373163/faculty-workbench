@@ -31,4 +31,10 @@ interface ResearchTaskDao {
 
     @Query("DELETE FROM research_tasks")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM research_tasks WHERE status = 2")
+    suspend fun deleteCompleted()
+
+    @Query("SELECT DISTINCT category FROM research_tasks ORDER BY category")
+    fun getCategories(): Flow<List<String>>
 }
