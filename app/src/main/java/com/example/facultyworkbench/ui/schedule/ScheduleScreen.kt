@@ -84,7 +84,7 @@ fun ScheduleScreen(repository: FacultyRepository) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("日程课表") })
+        TopAppBar(title = { Text("课表") })
 
         if (courses.isEmpty()) {
             Box(
