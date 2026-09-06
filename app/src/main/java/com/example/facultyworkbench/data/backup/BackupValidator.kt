@@ -3,6 +3,7 @@ package com.example.facultyworkbench.data.backup
 import com.example.facultyworkbench.data.entity.CourseEntity
 import com.example.facultyworkbench.data.entity.ResearchTaskEntity
 import com.example.facultyworkbench.data.entity.TaskEntity
+import com.example.facultyworkbench.data.entity.TodoEntity
 
 /**
  * 单表校验结果。
@@ -37,7 +38,8 @@ object BackupValidator {
             tables = listOf(
                 validateTasks(data.tasks),
                 validateCourses(data.courses),
-                validateResearchTasks(data.researchTasks)
+                validateResearchTasks(data.researchTasks),
+                validateTodos(data.todos)
             )
         )
     }
@@ -49,7 +51,8 @@ object BackupValidator {
         return data.copy(
             tasks = data.tasks.filter { isTaskValid(it) },
             courses = data.courses.filter { isCourseValid(it) },
-            researchTasks = data.researchTasks.filter { isResearchValid(it) }
+            researchTasks = data.researchTasks.filter { isResearchValid(it) },
+            todos = data.todos.filter { isTodoValid(it) }
         )
     }
 
@@ -74,6 +77,11 @@ object BackupValidator {
             r.status in 0..2 &&
             r.progress in 0..100 &&
             (r.dueDate == null || r.dueDate > 0L)
+
+    private fun isTodoValid(t: TodoEntity): Boolean =
+        t.title.isNotBlank() &&
+            t.priority in 0..2 &&
+            (t.dueDate == null || t.dueDate > 0L)
 
     // ---- 校验实现 ----
     private fun validateTasks(tasks: List<TaskEntity>): TableValidationResult {
@@ -138,5 +146,23 @@ object BackupValidator {
             }
         }
         return TableValidationResult("科研待办", tasks.size, tasks.size - invalid, invalid, issues)
+    }
+
+    private fun validateTodos(todos: List<TodoEntity>): TableValidationResult {
+        val issues = mutableListOf<String>()
+        var invalid = 0
+        todos.forEachIndexed { idx, t ->
+            val problems = mutableListOf<String>()
+            if (t.title.isBlank()) problems.add("标题为空")
+            if (t.priority !in 0..2) problems.add("优先级=${t.priority}(应0-2)")
+            if (t.dueDate != null && t.dueDate <= 0L) problems.add("截止时间无效")
+            if (problems.isNotEmpty()) {
+                invalid++
+                if (issues.size < 5) {
+                    issues.add("#${idx + 1}「${t.title.ifBlank { "(空)" }}」: ${problems.joinToString("，")}")
+                }
+            }
+        }
+        return TableValidationResult("待办清单", todos.size, todos.size - invalid, invalid, issues)
     }
 }

@@ -4,6 +4,7 @@ import com.example.facultyworkbench.data.entity.CourseEntity
 import com.example.facultyworkbench.data.entity.ProfileEntity
 import com.example.facultyworkbench.data.entity.ResearchTaskEntity
 import com.example.facultyworkbench.data.entity.TaskEntity
+import com.example.facultyworkbench.data.entity.TodoEntity
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -21,8 +22,24 @@ object BackupSerializer {
         root.put("tasks", JSONArray(data.tasks.map { taskToJson(it) }))
         root.put("courses", JSONArray(data.courses.map { courseToJson(it) }))
         root.put("researchTasks", JSONArray(data.researchTasks.map { researchToJson(it) }))
+        root.put("todos", JSONArray(data.todos.map { todoToJson(it) }))
 
         return root.toString(2)
+    }
+
+    /** 仅序列化待办清单列表为 JSON 数组字符串。 */
+    fun todosToJson(todos: List<TodoEntity>): String {
+        return JSONArray(todos.map { todoToJson(it) }).toString(2)
+    }
+
+    /** 从 JSON 数组字符串反序列化待办清单列表。 */
+    fun todosFromJson(json: String): List<TodoEntity> {
+        val arr = JSONArray(json)
+        val list = mutableListOf<TodoEntity>()
+        for (i in 0 until arr.length()) {
+            list.add(todoFromJson(arr.getJSONObject(i)))
+        }
+        return list
     }
 
     fun fromJson(json: String): BackupData {
@@ -56,13 +73,22 @@ object BackupSerializer {
             }
         }
 
+        val todos = mutableListOf<TodoEntity>()
+        val todosArr = root.optJSONArray("todos")
+        if (todosArr != null) {
+            for (i in 0 until todosArr.length()) {
+                todos.add(todoFromJson(todosArr.getJSONObject(i)))
+            }
+        }
+
         return BackupData(
             version = version,
             exportTime = exportTime,
             profile = profile,
             tasks = tasks,
             courses = courses,
-            researchTasks = researchTasks
+            researchTasks = researchTasks,
+            todos = todos
         )
     }
 
@@ -77,6 +103,8 @@ object BackupSerializer {
         put("status", t.status)
         put("progress", t.progress)
         put("createdAt", t.createdAt)
+        put("sourceType", t.sourceType)
+        put("sourceId", t.sourceId)
     }
 
     private fun taskFromJson(o: JSONObject) = TaskEntity(
@@ -88,7 +116,9 @@ object BackupSerializer {
         type = o.optString("type", "general"),
         status = o.optInt("status", 0),
         progress = o.optInt("progress", 0),
-        createdAt = o.optLong("createdAt", System.currentTimeMillis())
+        createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+        sourceType = o.optString("sourceType", ""),
+        sourceId = o.optLong("sourceId", 0L)
     )
 
     // ---- CourseEntity ----
@@ -138,6 +168,31 @@ object BackupSerializer {
         note = o.optString("note", ""),
         progress = o.optInt("progress", 0),
         status = o.optInt("status", 0),
+        createdAt = o.optLong("createdAt", System.currentTimeMillis())
+    )
+
+    // ---- TodoEntity ----
+    private fun todoToJson(t: TodoEntity) = JSONObject().apply {
+        put("id", t.id)
+        put("title", t.title)
+        put("note", t.note)
+        put("category", t.category)
+        put("priority", t.priority)
+        put("dueDate", t.dueDate ?: JSONObject.NULL)
+        put("isCompleted", t.isCompleted)
+        put("order", t.order)
+        put("createdAt", t.createdAt)
+    }
+
+    private fun todoFromJson(o: JSONObject) = TodoEntity(
+        id = o.optLong("id", 0L),
+        title = o.optString("title", ""),
+        note = o.optString("note", ""),
+        category = o.optString("category", "默认"),
+        priority = o.optInt("priority", 0),
+        dueDate = if (o.isNull("dueDate")) null else o.optLong("dueDate"),
+        isCompleted = o.optBoolean("isCompleted", false),
+        order = o.optInt("order", 0),
         createdAt = o.optLong("createdAt", System.currentTimeMillis())
     )
 
