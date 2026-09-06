@@ -1,9 +1,7 @@
-package com.example.facultyworkbench.ui.research
+package com.example.facultyworkbench.ui.todo
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -37,7 +41,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,11 +55,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.example.facultyworkbench.data.entity.ResearchTaskEntity
+import com.example.facultyworkbench.data.entity.TodoEntity
 import com.example.facultyworkbench.data.repository.FacultyRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -67,56 +73,100 @@ private val priorityColors = listOf(
     androidx.compose.ui.graphics.Color(0xFFFF9800),
     androidx.compose.ui.graphics.Color(0xFFE53935)
 )
-private val categoryOptions = listOf("论文", "项目", "实验", "申报", "其他")
 
-// 任务状态：0=待办 1=进行中 2=已完成
-private val statusLabels = listOf("待办", "进行中", "已完成")
-private val statusColors = listOf(
-    androidx.compose.ui.graphics.Color(0xFF74777F), // 待办 灰
-    androidx.compose.ui.graphics.Color(0xFF1976D2), // 进行中 蓝
-    androidx.compose.ui.graphics.Color(0xFF43A047)  // 已完成 绿
-)
-
-/** 根据进度推导状态 */
-private fun statusFromProgress(progress: Int): Int = when {
-    progress <= 0 -> 0
-    progress >= 100 -> 2
-    else -> 1
-}
+private val categoryOptions = listOf("默认", "工作", "生活", "学习", "其他")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ResearchScreen(
+fun TodoScreen(
     repository: FacultyRepository,
     snackbarHostState: SnackbarHostState
 ) {
-    val tasks by repository.allResearchTasks.collectAsState(initial = emptyList())
-    val categories by repository.researchCategories.collectAsState(initial = emptyList())
+    val todos by repository.allTodos.collectAsState(initial = emptyList())
+    val categories by repository.todoCategories.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
     var showDialog by remember { mutableStateOf(false) }
-    var editingTask by remember { mutableStateOf<ResearchTaskEntity?>(null) }
+    var editingTodo by remember { mutableStateOf<TodoEntity?>(null) }
     var selectedCategory by remember { mutableStateOf<String?>(null) } // null=全部
-    var selectedStatus by remember { mutableStateOf<Int?>(null) } // null=全部
+    var selectedStatus by remember { mutableStateOf<Int?>(null) } // null=全部 0=未完成 1=已完成
     var showClearDialog by remember { mutableStateOf(false) }
 
-    val filteredTasks = remember(tasks, selectedCategory, selectedStatus) {
-        tasks.filter { task ->
-            (selectedCategory == null || task.category == selectedCategory) &&
-                (selectedStatus == null || task.status == selectedStatus)
+    // 导入相关：暂存待导入的 JSON 字符串，弹出"合并/替换"确认
+    var pendingImportJson by remember { mutableStateOf<String?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val json = repository.exportTodosJson()
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    "已导出 ${todos.size} 条待办"
+                } catch (e: Exception) {
+                    "导出失败：${e.message}"
+                }
+            }
+            snackbarHostState.showSnackbar(result)
         }
     }
 
-    val totalCount = tasks.size
-    val completedCount = tasks.count { it.status == 2 }
-    val doingCount = tasks.count { it.status == 1 }
-    val todoCount = tasks.count { it.status == 0 }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use {
+                        it.readBytes().toString(Charsets.UTF_8)
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (result != null) {
+                pendingImportJson = result
+            } else {
+                snackbarHostState.showSnackbar("读取文件失败")
+            }
+        }
+    }
+
+    val filteredTodos = remember(todos, selectedCategory, selectedStatus) {
+        todos.filter { todo ->
+            (selectedCategory == null || todo.category == selectedCategory) &&
+                when (selectedStatus) {
+                    0 -> !todo.isCompleted
+                    1 -> todo.isCompleted
+                    else -> true
+                }
+        }
+    }
+
+    val totalCount = todos.size
+    val completedCount = todos.count { it.isCompleted }
     val progressPercent = if (totalCount == 0) 0f else completedCount.toFloat() / totalCount
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("科研") },
+                title = { Text("待办") },
                 actions = {
+                    IconButton(onClick = {
+                        val date = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                        exportLauncher.launch("todos_$date.json")
+                    }) {
+                        Icon(Icons.Default.FileUpload, contentDescription = "导出")
+                    }
+                    IconButton(onClick = {
+                        importLauncher.launch(arrayOf("application/json", "*/*"))
+                    }) {
+                        Icon(Icons.Default.FileDownload, contentDescription = "导入")
+                    }
                     if (completedCount > 0) {
                         IconButton(onClick = { showClearDialog = true }) {
                             Icon(Icons.Default.DeleteSweep, contentDescription = "清除已完成")
@@ -126,7 +176,10 @@ fun ResearchScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { editingTask = null; showDialog = true }) {
+            FloatingActionButton(onClick = {
+                editingTodo = null
+                showDialog = true
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新增")
             }
         }
@@ -193,27 +246,25 @@ fun ResearchScreen(
                     onClick = { selectedStatus = null },
                     label = { Text("全部 $totalCount") }
                 )
-                statusLabels.forEachIndexed { idx, label ->
-                    val cnt = when (idx) {
-                        0 -> todoCount
-                        1 -> doingCount
-                        else -> completedCount
-                    }
-                    FilterChip(
-                        selected = selectedStatus == idx,
-                        onClick = { selectedStatus = if (selectedStatus == idx) null else idx },
-                        label = { Text("$label $cnt") }
-                    )
-                }
+                FilterChip(
+                    selected = selectedStatus == 0,
+                    onClick = { selectedStatus = if (selectedStatus == 0) null else 0 },
+                    label = { Text("待办 ${totalCount - completedCount}") }
+                )
+                FilterChip(
+                    selected = selectedStatus == 1,
+                    onClick = { selectedStatus = if (selectedStatus == 1) null else 1 },
+                    label = { Text("已完成 $completedCount") }
+                )
             }
 
-            if (filteredTasks.isEmpty()) {
+            if (filteredTodos.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (tasks.isEmpty()) "暂无科研待办，点击右下角 + 添加" else "没有符合条件的科研待办",
+                        if (todos.isEmpty()) "暂无待办，点击右下角 + 添加" else "没有符合条件的待办",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -223,24 +274,22 @@ fun ResearchScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredTasks, key = { it.id }) { task ->
-                        ResearchItem(
-                            task = task,
-                            onToggleDone = {
+                    items(filteredTodos, key = { it.id }) { todo ->
+                        TodoItem(
+                            todo = todo,
+                            onToggle = {
                                 scope.launch {
-                                    if (task.isDone) {
-                                        repository.updateResearchStatus(task.id, statusFromProgress(task.progress), task.progress)
-                                        snackbarHostState.showSnackbar("已恢复")
-                                    } else {
-                                        repository.updateResearchStatus(task.id, 2, 100)
-                                        snackbarHostState.showSnackbar("已完成")
-                                    }
+                                    repository.updateTodoCompleted(todo.id, !todo.isCompleted)
+                                    snackbarHostState.showSnackbar(if (todo.isCompleted) "已标记为未完成" else "已完成")
                                 }
                             },
-                            onEdit = { editingTask = task; showDialog = true },
+                            onEdit = {
+                                editingTodo = todo
+                                showDialog = true
+                            },
                             onDelete = {
                                 scope.launch {
-                                    repository.deleteResearchTask(task)
+                                    repository.deleteTodo(todo)
                                     snackbarHostState.showSnackbar("已删除")
                                 }
                             }
@@ -252,24 +301,29 @@ fun ResearchScreen(
     }
 
     if (showDialog) {
-        ResearchEditDialog(
-            task = editingTask,
+        TodoEditDialog(
+            todo = editingTodo,
             onDismiss = { showDialog = false },
-            onSave = { title, category, priority, dueDate, note, progress ->
+            onSave = { title, note, category, priority, dueDate ->
                 scope.launch {
-                    val status = statusFromProgress(progress)
-                    if (editingTask != null) {
-                        repository.updateResearchTask(
-                            editingTask!!.copy(
-                                title = title, category = category, priority = priority,
-                                dueDate = dueDate, note = note, progress = progress, status = status
+                    if (editingTodo != null) {
+                        repository.updateTodo(
+                            editingTodo!!.copy(
+                                title = title,
+                                note = note,
+                                category = category,
+                                priority = priority,
+                                dueDate = dueDate
                             )
                         )
                     } else {
-                        repository.insertResearchTask(
-                            ResearchTaskEntity(
-                                title = title, category = category, priority = priority,
-                                dueDate = dueDate, note = note, progress = progress, status = status
+                        repository.insertTodo(
+                            TodoEntity(
+                                title = title,
+                                note = note,
+                                category = category,
+                                priority = priority,
+                                dueDate = dueDate
                             )
                         )
                     }
@@ -284,13 +338,13 @@ fun ResearchScreen(
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
             title = { Text("清除已完成") },
-            text = { Text("确定要删除所有已完成的科研待办吗？此操作不可撤销。") },
+            text = { Text("确定要删除所有已完成的待办吗？此操作不可撤销。") },
             confirmButton = {
                 TextButton(onClick = {
                     scope.launch {
-                        repository.deleteCompletedResearchTasks()
+                        repository.deleteCompletedTodos()
                         showClearDialog = false
-                        snackbarHostState.showSnackbar("已清除 $completedCount 项已完成科研待办")
+                        snackbarHostState.showSnackbar("已清除 $completedCount 项已完成待办")
                     }
                 }) { Text("确定") }
             },
@@ -299,19 +353,66 @@ fun ResearchScreen(
             }
         )
     }
+
+    // 导入确认弹窗：合并追加 / 替换全部
+    pendingImportJson?.let { json ->
+        AlertDialog(
+            onDismissRequest = { pendingImportJson = null },
+            title = { Text("导入待办清单") },
+            text = {
+                Column {
+                    Text("请选择导入方式：")
+                    Spacer(Modifier.height(8.dp))
+                    Text("• 合并追加：保留现有待办，追加导入的内容", style = MaterialTheme.typography.bodyMedium)
+                    Text("• 替换全部：清空现有待办后导入", style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                Row {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                val count = repository.importTodosJson(json, merge = true)
+                                pendingImportJson = null
+                                snackbarHostState.showSnackbar("已合并导入 $count 条待办")
+                            } catch (e: Exception) {
+                                pendingImportJson = null
+                                snackbarHostState.showSnackbar("导入失败：${e.message}")
+                            }
+                        }
+                    }) { Text("合并追加") }
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                val count = repository.importTodosJson(json, merge = false)
+                                pendingImportJson = null
+                                snackbarHostState.showSnackbar("已替换导入 $count 条待办")
+                            } catch (e: Exception) {
+                                pendingImportJson = null
+                                snackbarHostState.showSnackbar("导入失败：${e.message}")
+                            }
+                        }
+                    }) { Text("替换全部") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImportJson = null }) { Text("取消") }
+            }
+        )
+    }
 }
 
 @Composable
-private fun ResearchItem(
-    task: ResearchTaskEntity,
-    onToggleDone: () -> Unit,
+private fun TodoItem(
+    todo: TodoEntity,
+    onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (task.isDone)
+            containerColor = if (todo.isCompleted)
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             else
                 MaterialTheme.colorScheme.surfaceVariant
@@ -324,18 +425,18 @@ private fun ResearchItem(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = task.isDone, onCheckedChange = { onToggleDone() })
+            Checkbox(checked = todo.isCompleted, onCheckedChange = { onToggle() })
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = task.title,
+                    text = todo.title,
                     style = MaterialTheme.typography.titleMedium,
-                    textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
-                    color = if (task.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    textDecoration = if (todo.isCompleted) TextDecoration.LineThrough else null,
+                    color = if (todo.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
-                if (task.note.isNotBlank()) {
+                if (todo.note.isNotBlank()) {
                     Text(
-                        task.note,
+                        todo.note,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -344,12 +445,12 @@ private fun ResearchItem(
                     // 优先级标签
                     Box(
                         modifier = Modifier
-                            .background(priorityColors[task.priority].copy(alpha = 0.15f), MaterialTheme.shapes.small)
+                            .background(priorityColors[todo.priority].copy(alpha = 0.15f), MaterialTheme.shapes.small)
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            priorityLabels[task.priority],
-                            color = priorityColors[task.priority],
+                            priorityLabels[todo.priority],
+                            color = priorityColors[todo.priority],
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -361,46 +462,21 @@ private fun ResearchItem(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            task.category,
+                            todo.category,
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
-                    Spacer(Modifier.width(6.dp))
-                    // 状态标签
-                    Box(
-                        modifier = Modifier
-                            .background(statusColors[task.status].copy(alpha = 0.15f), MaterialTheme.shapes.small)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            statusLabels[task.status],
-                            color = statusColors[task.status],
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    if (task.dueDate != null) {
+                    if (todo.dueDate != null) {
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(task.dueDate)),
+                            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                                .format(java.util.Date(todo.dueDate)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                // 进度条
-                Spacer(Modifier.height(6.dp))
-                val displayProgress = if (task.isDone) 100 else task.progress
-                LinearProgressIndicator(
-                    progress = { displayProgress / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = statusColors[task.status]
-                )
-                Text(
-                    "进度 $displayProgress%",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
@@ -411,24 +487,23 @@ private fun ResearchItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ResearchEditDialog(
-    task: ResearchTaskEntity?,
+private fun TodoEditDialog(
+    todo: TodoEntity?,
     onDismiss: () -> Unit,
-    onSave: (String, String, Int, Long?, String, Int) -> Unit
+    onSave: (String, String, String, Int, Long?) -> Unit
 ) {
-    var title by remember(task) { mutableStateOf(task?.title ?: "") }
-    var note by remember(task) { mutableStateOf(task?.note ?: "") }
-    var priority by remember(task) { mutableStateOf(task?.priority ?: 0) }
-    var category by remember(task) { mutableStateOf(task?.category ?: "论文") }
+    var title by remember(todo) { mutableStateOf(todo?.title ?: "") }
+    var note by remember(todo) { mutableStateOf(todo?.note ?: "") }
+    var priority by remember(todo) { mutableStateOf(todo?.priority ?: 0) }
+    var category by remember(todo) { mutableStateOf(todo?.category ?: "默认") }
     var categoryExpanded by remember { mutableStateOf(false) }
-    var dueDate by remember(task) { mutableStateOf(task?.dueDate) }
+    var dueDate by remember(todo) { mutableStateOf(todo?.dueDate) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var progress by remember(task) { mutableStateOf(task?.progress ?: 0) }
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (task == null) "新增科研待办" else "编辑科研待办") },
+        title = { Text(if (todo == null) "新增待办" else "编辑待办") },
         text = {
             Column {
                 OutlinedTextField(
@@ -458,10 +533,13 @@ private fun ResearchEditDialog(
                 Box {
                     TextButton(onClick = { categoryExpanded = true }) { Text(category) }
                     DropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
-                        categoryOptions.forEach { c ->
+                        categoryOptions.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(c) },
-                                onClick = { category = c; categoryExpanded = false }
+                                text = { Text(cat) },
+                                onClick = {
+                                    category = cat
+                                    categoryExpanded = false
+                                }
                             )
                         }
                     }
@@ -481,32 +559,16 @@ private fun ResearchEditDialog(
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                val derivedStatus = statusFromProgress(progress)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("进度", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        statusLabels[derivedStatus],
-                        color = statusColors[derivedStatus],
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-                Slider(
-                    value = progress.toFloat(),
-                    onValueChange = { progress = it.toInt() },
-                    valueRange = 0f..100f,
-                    steps = 99
-                )
-                Text("$progress%", style = MaterialTheme.typography.bodyMedium)
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (title.isNotBlank()) onSave(title, category, priority, dueDate, note, progress) }) {
+            TextButton(onClick = { if (title.isNotBlank()) onSave(title, note, category, priority, dueDate) }) {
                 Text("保存")
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
     )
 
     if (showDatePicker) {
