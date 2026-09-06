@@ -92,12 +92,6 @@ fun ProfileScreen(
     var showSemesterEndDatePicker by remember { mutableStateOf(false) }
     var showReminderTimePicker by remember { mutableStateOf(false) }
 
-    // 应用更新
-    var isCheckingUpdate by remember { mutableStateOf(false) }
-    var isDownloadingUpdate by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<com.example.facultyworkbench.util.VersionInfo?>(null) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -323,34 +317,12 @@ fun ProfileScreen(
                             snackbarHostState.showSnackbar(result)
                         }
                     }) { Text("导出数据库文件(.db)") }
-
-                    TextButton(
-                        onClick = {
-                            if (isCheckingUpdate) return@TextButton
-                            isCheckingUpdate = true
-                            scope.launch {
-                                val info = com.example.facultyworkbench.util.UpdateChecker.checkForUpdate()
-                                isCheckingUpdate = false
-                                if (info == null) {
-                                    snackbarHostState.showSnackbar("当前已是最新版本，或检查更新失败")
-                                } else if (info.versionCode <= com.example.facultyworkbench.util.UpdateChecker.getCurrentVersionCode(context)) {
-                                    snackbarHostState.showSnackbar("当前已是最新版本")
-                                } else {
-                                    updateInfo = info
-                                    showUpdateDialog = true
-                                }
-                            }
-                        },
-                        enabled = !isCheckingUpdate
-                    ) {
-                        Text(if (isCheckingUpdate) "正在检查…" else "检查更新")
-                    }
                 }
             }
 
             val currentVerName = com.example.facultyworkbench.util.UpdateChecker.getCurrentVersionName(context)
             Text(
-                "教师工作台 v${currentVerName.ifEmpty { "1.0" }}\n本地数据存储，支持离线与自动更新",
+                "教师工作台 v${currentVerName.ifEmpty { "1.0" }}\n本地数据存储，支持离线",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -552,56 +524,6 @@ fun ProfileScreen(
                 }) { Text("确定") }
             },
             dismissButton = { TextButton(onClick = { showReminderTimePicker = false }) { Text("取消") } }
-        )
-    }
-
-    // 应用更新对话框
-    if (showUpdateDialog && updateInfo != null) {
-        val info = updateInfo!!
-        val isForce = com.example.facultyworkbench.util.UpdateChecker.getCurrentVersionCode(context) < info.minSupportedVersion
-        AlertDialog(
-            onDismissRequest = { if (!isForce) showUpdateDialog = false },
-            title = { Text("发现新版本 v${info.versionName}") },
-            text = {
-                Column {
-                    if (info.releaseNotes.isNotEmpty()) {
-                        Text("更新内容：", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(info.releaseNotes, style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        Text("当前有新版本可用，建议更新。", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    if (isDownloadingUpdate) {
-                        Text("正在下载并安装，请稍候…", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (isDownloadingUpdate) return@TextButton
-                        isDownloadingUpdate = true
-                        scope.launch {
-                            val id = com.example.facultyworkbench.util.UpdateChecker.downloadAndInstall(
-                                context, info.downloadUrl, info.versionName
-                            )
-                            isDownloadingUpdate = false
-                            if (id == -1L) {
-                                snackbarHostState.showSnackbar("下载失败，请稍后重试")
-                            } else {
-                                showUpdateDialog = false
-                            }
-                        }
-                    },
-                    enabled = !isDownloadingUpdate
-                ) { Text(if (isDownloadingUpdate) "下载中…" else "立即更新") }
-            },
-            dismissButton = {
-                if (!isForce) {
-                    TextButton(onClick = { showUpdateDialog = false }) { Text("稍后") }
-                }
-            }
         )
     }
 }
