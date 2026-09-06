@@ -24,6 +24,7 @@ import com.example.facultyworkbench.ui.research.ResearchScreen
 import com.example.facultyworkbench.ui.schedule.ScheduleScreen
 import com.example.facultyworkbench.ui.teaching.TeachingScreen
 import com.example.facultyworkbench.ui.today.TodayTasksScreen
+import com.example.facultyworkbench.ui.todo.TodoScreen
 import com.example.facultyworkbench.ui.profile.ProfileScreen
 import com.example.facultyworkbench.ui.theme.ThemeMode
 
@@ -53,7 +54,7 @@ fun FacultyApp(
                 Screen.bottomItems.forEach { screen ->
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) },
+                        label = { Text(screen.label, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
@@ -86,6 +87,9 @@ fun FacultyApp(
                         }
                     }
                 )
+            }
+            composable(Screen.Todo.route) {
+                TodoScreen(repository = repository, snackbarHostState = snackbarHostState)
             }
             composable(Screen.Teaching.route) {
                 TeachingScreen(repository = repository, snackbarHostState = snackbarHostState)

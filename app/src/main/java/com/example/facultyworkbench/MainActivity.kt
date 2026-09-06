@@ -49,7 +49,8 @@ class MainActivity : ComponentActivity() {
             taskDao = db.taskDao(),
             courseDao = db.courseDao(),
             researchTaskDao = db.researchTaskDao(),
-            profileDao = db.profileDao()
+            profileDao = db.profileDao(),
+            todoDao = db.todoDao()
         )
 
         themeModeFlow = settingsDataStore.data
